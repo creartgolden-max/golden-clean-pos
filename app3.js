@@ -485,7 +485,8 @@ async function adminConfig(area) {
   ];
   area.innerHTML = `<div class="card"><h3>Operación</h3><div class="grid g3">
       ${campos.map(([k, l, t]) => `<div class="fld"><label>${esc(l)}</label><input class="inp" data-cfg="${k}" type="${t}" value="${esc(cfg(k, ''))}"></div>`).join('')}
-      <div class="fld"><label>Fecha de entrega en domingo</label><label class="check" style="min-height:36px"><input type="checkbox" id="cfDom" ${cfg('saltar_domingo', true) ? 'checked' : ''}> Pasar al lunes</label></div></div></div>
+      <div class="fld"><label>Fecha de entrega en domingo</label><label class="check" style="min-height:36px"><input type="checkbox" id="cfDom" ${cfg('saltar_domingo', true) ? 'checked' : ''}> Pasar al lunes</label></div>
+      <div class="fld"><label>Alerta al taller si cambia la fecha</label><label class="check" style="min-height:36px"><input type="checkbox" id="cfAlFecha" ${cfg('alerta_auto_fecha', true) ? 'checked' : ''}> Enviar alerta automática</label></div></div></div>
     <div class="card"><h3>Datos que salen en la nota</h3><div class="grid g2">
       ${['direccion', 'colonia', 'ciudad', 'telefono', 'email'].map(k => `<div class="fld"><label>${k}</label><input class="inp" data-neg="${k}" value="${esc(n[k] || '')}"></div>`).join('')}</div>
       <div class="fld" style="margin-top:10px"><label>Leyenda al pie de la nota (**texto** = negritas)</label><textarea class="inp" id="cfLey" style="min-height:160px">${esc(cfg('leyenda_nota', ''))}</textarea></div></div>
@@ -493,6 +494,7 @@ async function adminConfig(area) {
   $('#cfOk').onclick = async () => {
     const rows = campos.map(([k, , t]) => { const v = $(`[data-cfg="${k}"]`).value; return { clave: k, valor: t === 'number' ? Number(v) : v }; });
     rows.push({ clave: 'saltar_domingo', valor: $('#cfDom').checked });
+    rows.push({ clave: 'alerta_auto_fecha', valor: $('#cfAlFecha').checked });
     rows.push({ clave: 'negocio', valor: Object.fromEntries($$('[data-neg]').map(i => [i.dataset.neg, i.value.trim()])) });
     rows.push({ clave: 'leyenda_nota', valor: $('#cfLey').value });
     const { error } = await S.sb.from('gc_config').upsert(rows);

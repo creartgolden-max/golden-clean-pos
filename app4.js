@@ -22,7 +22,7 @@ function diasTxt(fent, estado) {
 V.taller = async (el, params) => {
   if (params.tab) TK.tab = params.tab;
   const h0 = hoy(), hace7 = addDays(h0, -7), en7 = addDays(h0, 7);
-  el.innerHTML = head('Taller', 'Seguimiento de taller', `<button class="btn ghost" id="tXls">${svg('xls')} Excel</button>`) + '<div id="tBody"><div class="loading">Cargando…</div></div>';
+  el.innerHTML = head('Taller', 'Seguimiento de taller', `<button class="btn ghost" id="tXls">${svg('xls')} Excel</button>${(can('recepcion') || can('control')) ? '<button class="btn danger" id="tAlerta">⚠ Alerta al taller</button>' : ''}`) + '<div id="tBody"><div class="loading">Cargando…</div></div>';
   const [abiertos, recientes] = await Promise.all([
     fetchAll(() => S.sb.from('gc_taller_v').select('*').in('estado', ESTADOS_ABIERTOS).order('folio')),
     fetchAll(() => S.sb.from('gc_taller_v').select('*').in('estado', ['entregado']).gte('entregado_en', hace7).order('entregado_en', { ascending: false })),
@@ -133,6 +133,7 @@ V.taller = async (el, params) => {
       r.rep = sr.value || null; toast(`Folio ${r.folio}: REP ${sr.value || 'sin asignar'}`);
     };
   };
+  $('#tAlerta') && ($('#tAlerta').onclick = () => nuevaAlerta());
   $('#tXls').onclick = () => XL.save(`Taller_${h0}.xlsx`, wb => {
     const cols = [
       { h: 'No. SERVICIO', k: 'folio', w: 10 }, { h: 'LLEGÓ', get: r => fmtD(r.fecha_recepcion), w: 11 }, { h: 'ENTREGA', get: r => fmtD(r.fecha_entrega), w: 11 },

@@ -33,6 +33,7 @@ const ICON = {
   control: '<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
   clientes: '<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M17 11a3 3 0 1 0 0-6M22 21c0-3-2-5-5-5.5"/>',
   notas: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/>',
+  alertas: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
   taller: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>',
   etiquetas: '<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.5"/>',
   caja: '<rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20M6 15h4"/>',
@@ -51,6 +52,7 @@ const BLOQUES = [
   { id: 'recepcion', label: 'Recepción' },
   { id: 'control', label: 'Control de servicios' },
   { id: 'taller', label: 'Taller' },
+  { id: 'alertas', label: 'Alertas', check: () => vePrecios() || can('taller') },
   { id: 'clientes', label: 'Clientes' },
   { id: 'notas', label: 'Notas / cotización' },
   { id: 'etiquetas', label: 'Etiquetas' },
@@ -296,6 +298,7 @@ async function entrar(user) {
   try { await cargarCatalogos(); await cargarClientes(); }
   catch (e) { fail(e); }
   shell();
+  if (window.iniciarAlertas) iniciarAlertas();
   window.addEventListener('hashchange', route);
   route();
 }
@@ -327,15 +330,16 @@ async function cargarClientes() {
 }
 
 // ---------------------------------------------------------------- shell y rutas
+const visibleBloque = b => b.always || (b.check ? b.check() : b.masterOnly ? isMaster() : can(b.id));
 function shell() {
   const p = S.perfil;
-  const items = BLOQUES.filter(b => b.always || (b.masterOnly ? isMaster() : can(b.id)));
+  const items = BLOQUES.filter(visibleBloque);
   $('#app').innerHTML = `
   <div class="mobile-top"><div class="wordmark"><b>GOLDEN CLEAN</b><span>SOLUTIONS</span></div><button id="mMenu">Menú</button></div>
   <div class="app">
     <aside class="side" id="side">
       <div class="wordmark"><b>GOLDEN CLEAN</b><span>SOLUTIONS</span></div>
-      <nav class="nav">${items.map(b => `<button data-v="${b.id}">${svg(b.id)}<span>${esc(b.label)}</span></button>`).join('')}</nav>
+      <nav class="nav">${items.map(b => `<button data-v="${b.id}">${svg(b.id)}<span>${esc(b.label)}</span>${b.id === 'alertas' ? '<span class="nav-badge hidden" id="nb-alertas"></span>' : ''}</button>`).join('')}</nav>
       <div class="side-foot"><div class="who">${esc(p.nombre)}</div><div class="role">${p.rol === 'master' ? 'Usuario master' : 'Usuario'} · ${esc(p.usuario)}</div>
         <div class="links"><button id="bPass">Cambiar contraseña</button><button id="bSalir">Salir</button></div></div>
     </aside>
@@ -355,15 +359,21 @@ function go(view, params = {}) {
 function route() {
   const raw = location.hash.slice(1) || 'inicio';
   const [view, qs] = raw.split('?');
-  const allowed = BLOQUES.find(b => b.id === view && (b.always || (b.masterOnly ? isMaster() : can(b.id))));
+  const allowed = BLOQUES.find(b => b.id === view && visibleBloque(b));
   let v = allowed && V[view] ? view : 'inicio';
   if (v === 'inicio' && !vePrecios() && can('taller')) v = 'taller';
   S.view = v; S.params = Object.fromEntries(new URLSearchParams(qs || ''));
   $$('.nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  // cada navegación dibuja en un contenedor nuevo: si una pantalla anterior termina tarde, no pisa a la actual
   const main = $('#main');
-  main.innerHTML = '<div class="loading">Cargando…</div>';
+  const el = document.createElement('div');
+  el.innerHTML = '<div class="loading">Cargando…</div>';
+  main.replaceChildren(el);
   window.scrollTo(0, 0);
-  Promise.resolve(V[v](main, S.params)).catch(e => { fail(e); main.innerHTML = `<div class="card empty">No se pudo cargar: ${esc(errMsg(e))}</div>`; });
+  Promise.resolve(V[v](el, S.params)).catch(e => {
+    if (!el.isConnected) return;
+    fail(e); el.innerHTML = `<div class="card empty">No se pudo cargar: ${esc(errMsg(e))}</div>`;
+  });
 }
 function head(eyebrow, title, right = '') {
   return `<div class="page-head"><div><div class="eyebrow">${esc(eyebrow)}</div><h1>${esc(title)}</h1></div><div class="row">${right}</div></div>`;
@@ -990,6 +1000,7 @@ async function editarFolio(folio, onSaved) {
       { label: 'Cerrar', cls: 'ghost' },
       ...(can('notas') ? [{ label: 'Nota del cliente', cls: 'ghost', onClick: () => go('notas', { cliente: r.cliente_id, folios: r.folio }) }] : []),
       ...(can('etiquetas') ? [{ label: 'Etiqueta', cls: 'ghost', onClick: () => go('etiquetas', { folios: r.folio }) }] : []),
+      ...((can('recepcion') || can('control')) && window.nuevaAlerta ? [{ label: '⚠ Alerta al taller', cls: 'danger', onClick: () => nuevaAlerta(r.folio) }] : []),
       ...(can('caja') && +r.saldo > 0.009 && r.estado !== 'cancelado' ? [{ label: 'Cobrar', cls: 'ghost', onClick: () => go('caja', { folios: r.folio }) }] : []),
       ...(puedeEditar ? [{
         label: 'Guardar cambios', cls: 'gold', onClick: async ({ body }) => {

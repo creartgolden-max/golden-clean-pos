@@ -97,10 +97,35 @@ function errMsg(e) {
   const m = e?.message || e?.error_description || String(e);
   if (/Invalid login credentials/i.test(m)) return 'Usuario o contraseña incorrectos';
   if (/JWT|expired/i.test(m)) return 'La sesión expiró. Vuelve a entrar.';
+  if (/permission denied for (function|table|view)/i.test(m)) return 'Tu sesión venció o tu usuario no tiene permiso para esto. Sal y vuelve a entrar.';
   if (/Failed to fetch|NetworkError/i.test(m)) return 'Sin conexión a internet o al servidor';
   return m;
 }
-const fail = e => { console.error(e); toast(errMsg(e), true); };
+const fail = e => {
+  console.error(e);
+  const m = e?.message || String(e);
+  // si la sesión venció, en lugar del error técnico se pide entrar de nuevo
+  if (S.perfil && /permission denied|JWT|expired/i.test(m)) { verificarSesion().then(ok => { if (ok) toast(errMsg(e), true); }); return; }
+  toast(errMsg(e), true);
+};
+async function verificarSesion() {
+  if (!S.sb || !S.perfil) return true;
+  try {
+    const { data: { session } } = await S.sb.auth.getSession();
+    if (session && session.expires_at * 1000 > Date.now() + 30000) return true;
+    const { data, error } = await S.sb.auth.refreshSession();
+    if (!error && data?.session) return true;
+  } catch { }
+  sesionVencida();
+  return false;
+}
+function sesionVencida() {
+  if (!S.perfil) return;
+  S.perfil = null;
+  $('#modals').innerHTML = '';
+  ['#alOverlay', '#alPanel', '#alPill'].forEach(s => $(s)?.remove());
+  S.sb.auth.signOut().catch(() => { }).finally(() => pantallaLogin('Tu sesión venció. Vuelve a entrar con tu usuario y contraseña.'));
+}
 
 function modal({ title, body = '', wide = false, actions = [], onOpen }) {
   const wrap = document.createElement('div');
@@ -295,15 +320,21 @@ async function entrar(user) {
     return pantallaLogin(error ? errMsg(error) : 'Tu usuario no tiene acceso activo. Pide a la administradora que lo active.');
   }
   S.perfil = perfil;
+  if (!S._escuchas) {
+    S._escuchas = true;
+    S.sb.auth.onAuthStateChange(ev => { if (ev === 'SIGNED_OUT' && S.perfil) sesionVencida(); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && S.perfil) verificarSesion(); });
+    window.addEventListener('hashchange', route);
+  }
   try { await cargarCatalogos(); await cargarClientes(); }
   catch (e) { fail(e); }
   shell();
   if (window.iniciarAlertas) iniciarAlertas();
-  window.addEventListener('hashchange', route);
   route();
 }
 
 async function salir() {
+  S.perfil = null;
   await S.sb.auth.signOut();
   location.hash = '';
   location.reload();

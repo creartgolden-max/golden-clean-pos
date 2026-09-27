@@ -178,6 +178,8 @@ table.tbl{border-collapse:collapse;width:100%;font-size:13px}
 /* ---------- nota ---------- */
 .nota-prev{overflow:auto;background:#e9e4d8;border-radius:12px;padding:16px}
 .nota{width:1000px;margin:0 auto;background:#fff;color:#111;font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:14px;border:1px solid #ccc}
+/* los fondos verdes y grises deben salir también al imprimir / guardar en PDF */
+.nota,.nota *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .nota .n-top{display:grid;grid-template-columns:320px 1fr;min-height:200px}
 .nota .n-logo{display:flex;align-items:center;justify-content:center;padding:10px}
 .nota .n-logo img{width:200px;height:200px;object-fit:contain}
@@ -223,6 +225,7 @@ table.tbl{border-collapse:collapse;width:100%;font-size:13px}
 /* ---------- impresión ---------- */
 #printArea{display:none}
 @media print{
+  body.printing *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   body.printing>*:not(#printArea){display:none!important}
   body.printing #printArea{display:block}
   body.printing{background:#fff}

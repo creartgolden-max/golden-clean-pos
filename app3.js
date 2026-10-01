@@ -325,11 +325,11 @@ V.catalogos = async (el, params) => {
         <div class="fld"><label>Categoría</label><input class="inp" id="nsCat" list="dlCats"><datalist id="dlCats">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
         <div class="fld"><label>Tipo</label><select class="inp" id="nsTipo">${opts([{ v: 'base', l: 'Base' }, { v: 'adicional', l: 'Adicional' }])}</select></div>
         <div class="fld"><label>Precio</label><input class="inp num" type="number" id="nsPre" style="width:100px"></div>
-        <div class="fld"><label>Días entrega</label><input class="inp num" type="number" id="nsDias" value="15" style="width:90px"></div>
+        <div class="fld"><label>Días hábiles de entrega</label><input class="inp num" type="number" id="nsDias" value="15" style="width:90px"></div>
         <label class="check" style="min-height:36px"><input type="checkbox" id="nsFijo"> Precio fijo</label>
         <button class="btn gold" id="nsOk">Agregar</button></div>
         <div class="hint" style="margin-top:8px"><b>Precio fijo</b>: en recepción no se puede cambiar (solo con permiso de descuentos). Sin marcar: el precio es sugerido y se puede editar (precio especial). Los <b>días de entrega</b> calculan la fecha estimada.</div></div>
-      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Servicio</th><th>Categoría</th><th>Tipo</th><th class="num">Precio</th><th>Fijo</th><th class="num">Días</th><th class="num">Orden</th><th>Activo</th><th>Notas</th></tr></thead><tbody>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Servicio</th><th>Categoría</th><th>Tipo</th><th class="num">Precio</th><th>Fijo</th><th class="num">Días hábiles</th><th class="num">Orden</th><th>Activo</th><th>Notas</th></tr></thead><tbody>
       ${S.scat.map(s => `<tr><td>${celda('gc_servicios_cat', S.scat, s, 'nombre', 'text', { w: '260px' })}</td><td>${celda('gc_servicios_cat', S.scat, s, 'categoria', 'text', { list: 'dlCats', w: '130px' })}</td>
         <td>${celda('gc_servicios_cat', S.scat, s, 'tipo', 'select', { opts: ['base', 'adicional'] })}</td><td>${celda('gc_servicios_cat', S.scat, s, 'precio', 'number', { w: '95px' })}</td>
         <td>${celda('gc_servicios_cat', S.scat, s, 'precio_fijo', 'check')}</td><td>${celda('gc_servicios_cat', S.scat, s, 'dias_entrega', 'number', { w: '70px' })}</td>
@@ -485,16 +485,28 @@ async function adminConfig(area) {
   ];
   area.innerHTML = `<div class="card"><h3>Operación</h3><div class="grid g3">
       ${campos.map(([k, l, t]) => `<div class="fld"><label>${esc(l)}</label><input class="inp" data-cfg="${k}" type="${t}" value="${esc(cfg(k, ''))}"></div>`).join('')}
-      <div class="fld"><label>Fecha de entrega en domingo</label><label class="check" style="min-height:36px"><input type="checkbox" id="cfDom" ${cfg('saltar_domingo', true) ? 'checked' : ''}> Pasar al lunes</label></div>
-      <div class="fld"><label>Alerta al taller si cambia la fecha</label><label class="check" style="min-height:36px"><input type="checkbox" id="cfAlFecha" ${cfg('alerta_auto_fecha', true) ? 'checked' : ''}> Enviar alerta automática</label></div></div></div>
+      <div class="fld"><label>Alerta al taller si cambia la fecha</label><label class="check" style="min-height:36px"><input type="checkbox" id="cfAlFecha" ${cfg('alerta_auto_fecha', true) ? 'checked' : ''}> Enviar alerta automática</label></div></div>
+      <div class="sep"></div>
+      <h3 style="font-size:15px">Días hábiles (para calcular la fecha de entrega)</h3>
+      <div class="chips" id="cfDias">${[[1, 'Lunes'], [2, 'Martes'], [3, 'Miércoles'], [4, 'Jueves'], [5, 'Viernes'], [6, 'Sábado'], [7, 'Domingo']].map(([v, l]) => `<span class="chip${diasLaborales().includes(v) ? ' on' : ''}" data-d="${v}">${l}</span>`).join('')}</div>
+      <div class="hint" style="margin-top:6px">Los días de entrega del catálogo se cuentan solo en estos días. Si la fecha cae en día no laboral o festivo, pasa al siguiente hábil.</div>
+      <div class="fld" style="margin-top:12px"><label>Días festivos (uno por línea, formato AAAA-MM-DD)</label><textarea class="inp" id="cfFest" style="min-height:120px">${esc(festivos().join('\n'))}</textarea>
+        <div class="hint">Cargados los oficiales de México 2026 y 2027. Agrega los que el atelier cierre (vacaciones, puentes).</div></div></div>
     <div class="card"><h3>Datos que salen en la nota</h3><div class="grid g2">
       ${['direccion', 'colonia', 'ciudad', 'telefono', 'email'].map(k => `<div class="fld"><label>${k}</label><input class="inp" data-neg="${k}" value="${esc(n[k] || '')}"></div>`).join('')}</div>
       <div class="fld" style="margin-top:10px"><label>Leyenda al pie de la nota (**texto** = negritas)</label><textarea class="inp" id="cfLey" style="min-height:160px">${esc(cfg('leyenda_nota', ''))}</textarea></div></div>
     <button class="btn gold" id="cfOk">Guardar configuración</button>`;
+  $$('#cfDias .chip').forEach(c => c.onclick = () => c.classList.toggle('on'));
   $('#cfOk').onclick = async () => {
     const rows = campos.map(([k, , t]) => { const v = $(`[data-cfg="${k}"]`).value; return { clave: k, valor: t === 'number' ? Number(v) : v }; });
-    rows.push({ clave: 'saltar_domingo', valor: $('#cfDom').checked });
     rows.push({ clave: 'alerta_auto_fecha', valor: $('#cfAlFecha').checked });
+    const dias = $$('#cfDias .chip.on').map(c => +c.dataset.d).sort();
+    if (!dias.length) return toast('Marca al menos un día hábil', true);
+    rows.push({ clave: 'dias_laborales', valor: dias });
+    const fest = uniq($('#cfFest').value.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean)
+      .map(s => { const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/); return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : s; })
+      .filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s))).sort();
+    rows.push({ clave: 'festivos', valor: fest });
     rows.push({ clave: 'negocio', valor: Object.fromEntries($$('[data-neg]').map(i => [i.dataset.neg, i.value.trim()])) });
     rows.push({ clave: 'leyenda_nota', valor: $('#cfLey').value });
     const { error } = await S.sb.from('gc_config').upsert(rows);

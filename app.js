@@ -308,7 +308,11 @@ async function pantallaLogin(msg = '') {
         if (error) throw error;
         await entrar(data.user);
       }
-    } catch (e) { $('#lMsg').textContent = errMsg(e); btn.disabled = false; }
+    } catch (e) {
+      console.error(e);
+      const m = $('#lMsg');
+      if (m) { m.textContent = errMsg(e); btn.disabled = false; } else toast(errMsg(e), true);
+    }
   };
 }
 
@@ -538,11 +542,21 @@ function modalNuevaMarca(nombre, onSaved) {
 }
 const marcaInfo = nombre => S.marcas.find(m => m.nombre === String(nombre || '').trim().toUpperCase());
 
+// días laborales en formato ISO: 1 = lunes … 7 = domingo
+const diasLaborales = () => { const v = cfg('dias_laborales', [1, 2, 3, 4, 5]); return Array.isArray(v) && v.length ? v.map(Number) : [1, 2, 3, 4, 5]; };
+const festivos = () => { const v = cfg('festivos', []); return Array.isArray(v) ? v : []; };
+const esHabil = iso => { const isodow = dow(iso) === 0 ? 7 : dow(iso); return diasLaborales().includes(isodow) && !festivos().includes(iso); };
+// suma días HÁBILES (salta fines de semana no laborales y festivos)
+function sumarHabiles(desde, dias) {
+  let d = desde, i = 0, guarda = 0;
+  while (i < Math.max(0, dias) && guarda < 2000) { d = addDays(d, 1); guarda++; if (esHabil(d)) i++; }
+  guarda = 0;
+  while (!esHabil(d) && guarda < 30) { d = addDays(d, 1); guarda++; }
+  return d;
+}
 function calcEntrega(desde, lineas) {
   const dias = lineas.map(l => S.scat.find(c => c.id === +l.cat_id)?.dias_entrega).filter(x => x != null);
-  let d = addDays(desde, dias.length ? Math.max(...dias) : +cfg('dias_entrega_default', 15));
-  if (cfg('saltar_domingo', true) && dow(d) === 0) d = addDays(d, 1);
-  return d;
+  return sumarHabiles(desde, dias.length ? Math.max(...dias) : +cfg('dias_entrega_default', 15));
 }
 
 // editor de líneas de servicio (recepción y edición de folio)
@@ -553,14 +567,14 @@ function lineasEditor(container, lineas, onChange, { bloqueado = false } = {}) {
       <table class="lines">${lineas.map((l, i) => {
         const cat = S.scat.find(c => c.id === +l.cat_id);
         const fijo = cat?.precio_fijo && !can('descuentos');
-        return `<tr><td style="width:60%">${l.cat_id ? `<b>${esc(l.nombre)}</b> <small class="muted">${esc(cat?.categoria || '')} · ${cat?.dias_entrega ?? '–'} días${fijo ? ' · precio fijo' : ''}</small>`
+        return `<tr><td style="width:60%">${l.cat_id ? `<b>${esc(l.nombre)}</b> <small class="muted">${esc(cat?.categoria || '')} · ${cat?.dias_entrega ?? '–'} días hábiles${fijo ? ' · precio fijo' : ''}</small>`
           : `<input class="inp" data-n="${i}" value="${esc(l.nombre)}" placeholder="Descripción del servicio">`}</td>
           <td style="width:120px"><input class="inp num" data-p="${i}" type="number" min="0" step="0.01" value="${l.precio}" ${fijo || bloqueado ? 'disabled' : ''}></td>
           <td style="width:34px"><button class="btn xs danger" data-x="${i}" ${bloqueado ? 'disabled' : ''}>×</button></td></tr>`;
       }).join('') || '<tr><td class="muted">Sin servicios todavía</td></tr>'}</table>
       <div class="row" style="margin-top:8px;align-items:center">
         <select class="inp" style="max-width:340px" data-add ${bloqueado ? 'disabled' : ''}><option value="">+ Agregar servicio del catálogo…</option>
-          ${cats.map(cat => `<optgroup label="${esc(cat)}">${S.scat.filter(c => c.activo && c.categoria === cat).map(c => `<option value="${c.id}">${esc(c.nombre)} — ${c.precio ? money0(c.precio) : 'cotizar'} · ${c.dias_entrega} d</option>`).join('')}</optgroup>`).join('')}
+          ${cats.map(cat => `<optgroup label="${esc(cat)}">${S.scat.filter(c => c.activo && c.categoria === cat).map(c => `<option value="${c.id}">${esc(c.nombre)} — ${c.precio ? money0(c.precio) : 'cotizar'} · ${c.dias_entrega} d háb.</option>`).join('')}</optgroup>`).join('')}
         </select>
         <button class="btn sm ghost" data-libre ${bloqueado ? 'disabled' : ''}>+ Otro (texto libre)</button>
       </div>`;
